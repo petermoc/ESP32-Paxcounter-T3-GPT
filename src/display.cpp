@@ -62,6 +62,13 @@ BB_SPI_LCD *dp = NULL;
 #define DISPLAY_PAGE_PAX_GRAPH          6
 #define DISPLAY_PAGE_BLANK_SCREEN       7
 
+static bool skipPage(uint8_t page) {
+  return page == DISPLAY_PAGE_TIME_OF_DAY
+      || page == DISPLAY_PAGE_BLANK_SCREEN
+      || page == DISPLAY_PAGE_PAX_GRAPH;
+}
+
+
 void dp_setup(int contrast) {
 #if (HAS_DISPLAY) == 1 // I2C OLED
 
@@ -178,10 +185,22 @@ void dp_refresh(bool nextPage) {
 #endif
 
   if (nextPage) {
-    DisplayPage = (DisplayPage >= DISPLAY_PAGES - 1) ? 0 : (DisplayPage + 1);
+    do {
+      DisplayPage = (DisplayPage >= DISPLAY_PAGES - 1) ? 0 : (DisplayPage + 1);
+    } while (skipPage(DisplayPage));
     dp_clear();
-  } else
-    dp->setCursor(0, 0);
+  } else {
+    // IMPORTANT: also skip invalid pages even if nextPage == false
+    if (skipPage(DisplayPage)) {
+      do {
+        DisplayPage = (DisplayPage >= DISPLAY_PAGES - 1) ? 0 : (DisplayPage + 1);
+      } while (skipPage(DisplayPage));
+      dp_clear();
+    } else {
+      dp->setCursor(0, 0);
+    }
+  }
+
 
   switch (DisplayPage) {
     // page 0: pax + parameters overview
@@ -360,13 +379,13 @@ void dp_refresh(bool nextPage) {
 
   // ---------- page 4: time ----------
   case DISPLAY_PAGE_TIME_OF_DAY:
-
+    //break;
     time(&now);
     localtime_r(&now, &timeinfo);
 
     dp_setFont(MY_FONT_STRETCHED);
     dp->setCursor(0, 0);
-    dp->printf("Timeofday:");
+    dp->printf("TimeofdayX:");
     dp->setCursor(0, 26);
     dp_setFont(MY_FONT_LARGE);
     strftime(strftime_buf, sizeof(strftime_buf), "%T", &timeinfo);
@@ -489,14 +508,15 @@ void dp_refresh(bool nextPage) {
 
   // ---------- page 6: pax graph ----------
   case DISPLAY_PAGE_PAX_GRAPH:
-
+    //break; //Peter
     // update and show histogram
     dp_plotCurve(count.pax, false);
     dp_dump(plotbuf);
     break;
 
   // ---------- page 7: blank screen ----------
-  case DISPLAY_PAGE_BLANK_SCREEN:
+ case DISPLAY_PAGE_BLANK_SCREEN:
+ //   break; //Peter
 
 #ifdef HAS_BUTTON
     dp_clear();
@@ -525,6 +545,7 @@ void dp_dump(uint8_t *pBuffer) {
 }
 
 void dp_clear(void) {
+  //return; //Peter
   dp->fillScreen(MY_DISPLAY_BGCOLOR);
   dp->display();
   dp->setCursor(0, 0);

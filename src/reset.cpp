@@ -61,6 +61,7 @@ void do_reset(bool warmstart) {
 }
 
 void do_after_reset(void) {
+  ESP_LOGW(TAG, "do_after_reset ENTER");
   struct timeval sleep_stop_time;
   int64_t sleep_time_ms;
 
@@ -107,6 +108,7 @@ void do_after_reset(void) {
     RTC_restarts++;
     break;
   }
+  ESP_LOGW(TAG, "do_after_reset EXIT runmode=%d restarts=%d", RTC_runmode, RTC_restarts);
 }
 
 void enter_deepsleep(uint32_t wakeup_sec, gpio_num_t wakeup_gpio) {

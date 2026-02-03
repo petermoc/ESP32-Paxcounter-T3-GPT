@@ -76,6 +76,13 @@ void switch_LED1(led_states state) {
 
 void ledLoop(void *parameter) {
   while (1) {
+    //peter
+    switch_LED(LED_OFF);
+    rgb_set_color(COLOR_NONE);
+    delay(1000);
+    continue;
+    //end peter
+    
     // Custom blink running always have priority other LoRaWAN led
     // management
     if (LEDBlinkStarted && LEDBlinkDuration) {
@@ -145,7 +152,9 @@ void ledLoop(void *parameter) {
       previousLEDState = LEDState;
     }
     // give yield to CPU
-    delay(5);
+    //delay(5);
+    delay(200);
+    
   } // while(1)
 };  // ledloop()
 

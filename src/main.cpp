@@ -82,6 +82,10 @@ BME_IRQ         <- setBMEIRQ() <- Ticker.h
 char clientId[20] = {0}; // unique ClientID
 
 void setup() {
+
+  //ESP_LOGE(TAG, ">>> SETUP START reached <<<");
+  //delay(10000);
+
   char features[100] = "";
 
   // Reduce power consumption (optional)
@@ -288,6 +292,18 @@ void setup() {
   ESP_LOGI(TAG, "Starting libpax...");
   struct libpax_config_t configuration;
   libpax_default_config(&configuration);
+
+
+
+
+  #ifndef LIBPAX_WIFI
+  if (cfg.wifiscan) {
+    ESP_LOGW(TAG, "WIFISCAN requested in NVRAM but LIBPAX_WIFI not compiled -> forcing off");
+    cfg.wifiscan = 0;
+  }
+  #endif
+
+
 
   // configure WIFI sniffing
   strcpy(configuration.wifi_my_country_str, WIFI_MY_COUNTRY);

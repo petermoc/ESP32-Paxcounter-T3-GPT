@@ -1,1 +1,10 @@
-404: Not Found
+.pio/
+.vscode/
+*.log
+*.elf
+*.bin
+*.map
+*.zip
+.env
+ota.conf
+loraconf.h
