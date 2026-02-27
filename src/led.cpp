@@ -76,12 +76,14 @@ void switch_LED1(led_states state) {
 
 void ledLoop(void *parameter) {
   while (1) {
+#ifdef LED_LOOP_FORCE_OFF
     //peter
     switch_LED(LED_OFF);
     rgb_set_color(COLOR_NONE);
     delay(1000);
     continue;
     //end peter
+#endif
     
     // Custom blink running always have priority other LoRaWAN led
     // management
@@ -159,3 +161,15 @@ void ledLoop(void *parameter) {
 };  // ledloop()
 
 #endif // #if (HAS_LED != NOT_A_PIN) || defined(HAS_RGB_LED)
+
+void led_blink(uint32_t color, uint32_t duration_ms) {
+#if (HAS_LED != NOT_A_PIN) || defined(HAS_RGB_LED)
+  LEDColor = color;
+  LEDBlinkDuration = duration_ms;
+  LEDBlinkStarted = millis();
+  LEDState = LED_ON;
+#else
+  (void)color;
+  (void)duration_ms;
+#endif
+}

@@ -9,6 +9,27 @@ Ticker mqttTimer;
 WiFiClient netClient;
 MQTTClient mqttClient;
 
+static int mqtt_connect_wifi(void) {
+  WiFi.mode(WIFI_STA);
+  WiFi.setHostname(clientId);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  uint8_t attempt = 0;
+  while (WiFi.status() != WL_CONNECTED && attempt < 30) {
+    delay(500);
+    attempt++;
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    ESP_LOGW(TAG, "WiFi connect failed for MQTT (ssid=%s)", WIFI_SSID);
+    return -1;
+  }
+
+  ESP_LOGI(TAG, "WiFi connected for MQTT, IP=%s",
+           WiFi.localIP().toString().c_str());
+  return 0;
+}
+
 void mqtt_deinit(void) {
   mqttClient.unsubscribe(MQTT_INTOPIC);
   mqttClient.onMessageAdvanced(NULL);
@@ -18,8 +39,15 @@ void mqtt_deinit(void) {
 
 esp_err_t mqtt_init(void) {
   // setup network connection and MQTT client
+#if (MQTT_ETHERNET)
   ETH.begin();
   ETH.setHostname(clientId);
+#else
+  if (mqtt_connect_wifi() != 0) {
+    ESP_LOGW(TAG, "MQTT starts without network, will retry in loop");
+  }
+#endif
+
   mqttClient.begin(MQTT_SERVER, MQTT_PORT, netClient);
   mqttClient.setKeepAlive(MQTT_KEEPALIVE);
   mqttClient.onMessageAdvanced(mqtt_callback);
@@ -43,6 +71,14 @@ int mqtt_connect(const char *my_host, const uint16_t my_port) {
   IPAddress mqtt_server_ip;
 
   ESP_LOGI(TAG, "MQTT name is %s", MQTT_CLIENTNAME);
+
+#if !(MQTT_ETHERNET)
+  if (WiFi.status() != WL_CONNECTED) {
+    if (mqtt_connect_wifi() != 0) {
+      return -1;
+    }
+  }
+#endif
 
   // resolve server host name
   if (WiFi.hostByName(my_host, mqtt_server_ip)) {
@@ -86,8 +122,9 @@ void mqtt_client_task(void *param) {
         continue;
 
       // prepare mqtt topic
-      char topic[16];
-      snprintf(topic, 16, "%s/%u", MQTT_OUTTOPIC, msg.MessagePort);
+      char topic[64];
+      snprintf(topic, sizeof(topic), "%s/%s/%u", MQTT_OUTTOPIC, MQTT_CLIENTNAME,
+               msg.MessagePort);
       size_t out_len = 0;
 
       // get length of base64 encoded message

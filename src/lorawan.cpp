@@ -2,6 +2,7 @@
 
 #if (HAS_LORA)
 #include "lorawan.h"
+#include "led.h"
 
 
 #if CLOCK_ERROR_PROCENTAGE > 7
@@ -181,10 +182,8 @@ void showLoraKeys(void) {
   uint8_t buf[32];
   os_getDevEui((u1_t *)buf);
   printKey("DevEUI", buf, 8, true);
-  //os_getArtEui((u1_t *)buf);
-  //printKey("AppEUI", buf, 8, true);
-  //os_getDevKey((u1_t *)buf);
-  //printKey("AppKey", buf, 16, false);
+  os_getArtEui((u1_t *)buf);
+  printKey("JoinEUI", buf, 8, true);
 }
 
 #endif // VERBOSE
@@ -254,6 +253,26 @@ esp_err_t lmic_init(void) {
   ESP_LOGI(TAG, "LORA send queue created, size %d Bytes",
            SEND_QUEUE_SIZE * sizeof(MessageBuffer_t));
 
+  ESP_LOGI(TAG, "LoRa pinmap: SCK=%d MISO=%d MOSI=%d CS=%d RST=%d DIO0=%d DIO1=%d DIO2=%d",
+           LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS, LORA_RST, LORA_IRQ, LORA_IO1, LORA_IO2);
+#if CFG_LMIC_EU_like
+  ESP_LOGI(TAG, "LoRa region: EU868");
+#elif CFG_LMIC_US_like
+  ESP_LOGI(TAG, "LoRa region: US915");
+#elif CFG_LMIC_AU_like
+  ESP_LOGI(TAG, "LoRa region: AU915");
+#elif CFG_LMIC_AS_like
+  ESP_LOGI(TAG, "LoRa region: AS923");
+#elif CFG_LMIC_KR_like
+  ESP_LOGI(TAG, "LoRa region: KR920");
+#else
+  ESP_LOGI(TAG, "LoRa region: (unknown)");
+#endif
+
+#if (VERBOSE)
+  showLoraKeys();
+#endif
+
   // setup LMIC stack
   os_init_ex(&myPinmap); // initialize lmic run-time environment
 
@@ -296,8 +315,11 @@ esp_err_t lmic_init(void) {
   // load saved session from RTC, if we have one
   if (RTC_runmode == RUNMODE_WAKEUP)
     LoadLMICFromRTC();
-  if (!LMIC_startJoining())
-    ESP_LOGI(TAG, "Already joined");
+  if (!LMIC_startJoining()) {
+    ESP_LOGI(TAG, "LMIC_startJoining() returned false (already joined or join in progress)");
+  } else {
+    ESP_LOGI(TAG, "LMIC_startJoining() started");
+  }
 #endif
 
   // start lmic loop task
@@ -394,17 +416,24 @@ void myEventCallback(void *pUserData, ev_t ev) {
   case EV_JOINED:
     // do the after join network-specific setup.
     lora_setupForNetwork(false);
+    ESP_LOGI(TAG, "Join success: last RSSI=%d SNR=%d",
+             LMIC.rssi, (LMIC.snr + 2) / 4);
+    led_blink(COLOR_GREEN, 1500);
     break;
 
   case EV_JOIN_FAILED:
     // must call LMIC_reset() to stop joining
     // otherwise join procedure continues.
     LMIC_reset();
+    ESP_LOGW(TAG, "Join failed: last RSSI=%d SNR=%d",
+             LMIC.rssi, (LMIC.snr + 2) / 4);
     break;
 
   case EV_JOIN_TXCOMPLETE:
     // replace descriptor from library with more descriptive term
     snprintf(lmic_event_msg, LMIC_EVENTMSG_LEN, "%-16s", "JOIN_WAIT");
+    ESP_LOGI(TAG, "Join RX window done: last RSSI=%d SNR=%d",
+             LMIC.rssi, (LMIC.snr + 2) / 4);
     break;
 
   default:
@@ -415,8 +444,9 @@ void myEventCallback(void *pUserData, ev_t ev) {
   if (msgWaiting)
     snprintf(lmic_event_msg + 14, LMIC_EVENTMSG_LEN - 14, "%2u", msgWaiting);
 
-  // print event
-  ESP_LOGD(TAG, "%s", lmic_event_msg);
+  // print event (INFO so it shows with debug_level=3)
+  ESP_LOGI(TAG, "%s | opmode=0x%08X devaddr=0x%08X",
+           lmic_event_msg, LMIC.opmode, LMIC.devaddr);
 }
 
 // event EV_RXCOMPLETE message handler

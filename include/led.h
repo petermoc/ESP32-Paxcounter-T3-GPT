@@ -34,5 +34,6 @@ void rgb_set_color(uint32_t color);
 void ledLoop(void *parameter);
 void switch_LED(led_states state);
 void switch_LED1(led_states state);
+void led_blink(uint32_t color, uint32_t duration_ms);
 
 #endif

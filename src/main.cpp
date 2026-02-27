@@ -102,12 +102,8 @@ void setup() {
   (*((uint32_t volatile *)ETS_UNCACHED_ADDR((DR_REG_RTCCNTL_BASE + 0xd4)))) = 0;
 #endif
 
-  // hash 6 byte device MAC to 4 byte clientID
-  uint8_t mac[6];
-  esp_read_mac(mac, ESP_MAC_WIFI_STA);
-
-  const uint32_t hashedmac = myhash((const char *)mac, 6);
-  snprintf(clientId, 20, "paxcounter_%08x", hashedmac);
+  // fixed device name (TTN / logs)
+  snprintf(clientId, sizeof(clientId), "paxcounter-T3");
 
   // setup debug output or silence device
 #if (VERBOSE)
@@ -293,6 +289,14 @@ void setup() {
   struct libpax_config_t configuration;
   libpax_default_config(&configuration);
 
+  // Keep runtime config aligned with compile-time default to avoid stale NVRAM
+  // settings keeping WiFi scan disabled after firmware changes.
+  if (cfg.wifiscan != WIFICOUNTER) {
+    cfg.wifiscan = WIFICOUNTER;
+    saveConfig(false);
+    ESP_LOGI(TAG, "WIFISCAN runtime config aligned to compile-time default");
+  }
+
 
 
 
@@ -313,11 +317,16 @@ void setup() {
   configuration.wifi_rssi_threshold = cfg.rssilimit;
   ESP_LOGI(TAG, "WIFISCAN: %s", cfg.wifiscan ? "on" : "off");
 
-  // configure BLE sniffing
+
+  //configure BLE sniffing
   configuration.blecounter = cfg.blescan;
   configuration.blescantime = cfg.blescantime;
   configuration.ble_rssi_threshold = cfg.rssilimit;
   ESP_LOGI(TAG, "BLESCAN: %s", cfg.blescan ? "on" : "off");
+
+
+  //ESP_LOGW(TAG, "BLESCAN: FORCED ON (runtime config ignored)");
+
 
   int config_update = libpax_update_config(&configuration);
   if (config_update != 0) {
