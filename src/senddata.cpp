@@ -1,5 +1,6 @@
 // Basic Config
 #include "senddata.h"
+#include "http_fallback.h"
 
 // void setSendIRQ(TimerHandle_t xTimer) {
 //  xTaskNotify(irqHandlerTask, SENDCYCLE_IRQ, eSetBits);
@@ -120,6 +121,11 @@ void sendData() {
 #endif // HAS_SDCARD
 
       SendPayload(COUNTERPORT);
+#ifdef HAS_MQTT
+      ESP_LOGI(TAG, "HTTP fallback sample: pax=%d wifi=%d ble=%d", count.pax,
+               count.wifi_count, count.ble_count);
+      http_fallback_send_counts(count);
+#endif
       break; // case COUNTDATA
 
 #if (HAS_BME)
@@ -209,3 +215,5 @@ bool allQueuesEmtpy(void) {
 #endif
   return (rc == 0) ? true : false;
 }
+
+

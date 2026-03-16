@@ -8,3 +8,6 @@
 .env
 ota.conf
 loraconf.h
+shared/ota.conf
+shared/loraconf.h
+test.txt

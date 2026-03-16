@@ -9,6 +9,15 @@ Ticker mqttTimer;
 WiFiClient netClient;
 MQTTClient mqttClient;
 
+static bool mqtt_is_local_lan_target(void) {
+  return strncmp(MQTT_SERVER, "192.168.1.", 10) == 0;
+}
+
+static bool mqtt_is_same_lan_as_broker(void) {
+  const IPAddress ip = WiFi.localIP();
+  return ip[0] == 192 && ip[1] == 168 && ip[2] == 1;
+}
+
 static int mqtt_connect_wifi(void) {
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(clientId);
@@ -77,6 +86,12 @@ int mqtt_connect(const char *my_host, const uint16_t my_port) {
     if (mqtt_connect_wifi() != 0) {
       return -1;
     }
+  }
+
+  if (mqtt_is_local_lan_target() && !mqtt_is_same_lan_as_broker()) {
+    ESP_LOGI(TAG, "Skipping local MQTT broker %s because device IP %s is outside home LAN", MQTT_SERVER,
+             WiFi.localIP().toString().c_str());
+    return -1;
   }
 #endif
 
