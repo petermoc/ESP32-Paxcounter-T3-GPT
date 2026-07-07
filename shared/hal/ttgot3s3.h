@@ -1,6 +1,6 @@
 // clang-format off
-// upload_speed 921600
-// board esp32-s3-devkitc-1
+// upload_speed 460800
+// board lilygo-t3-s3
 
 // for pinouts see https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/blob/master/docs/en/t3_s3_sx1262/t3_s3_sx1262_hw.md
 
@@ -20,12 +20,15 @@
 #define HAS_DISPLAY 1
 #define MY_DISPLAY_SDA (18)
 #define MY_DISPLAY_SCL (17)
-#define MY_DISPLAY_RST (14)
+#define FAST_BOOT_DISPLAY 1 // skip long splash delays so tracker comes up quickly
+// T3-S3 OLED reset is not wired to a dedicated GPIO; GPIO14 is SD SCLK.
+// Let the display driver use its default "no reset pin" path instead.
 //#define MY_DISPLAY_FLIP  1 // use if display is rotated
 
 // button and led
 #define HAS_BUTTON GPIO_NUM_0       // button is on GPIO0
 #define HAS_LED (37) // LED is on GPIO37
+#define HAS_MQTT 1 // enable WiFi HTTP fallback transport
 
 // LORA settings
 #define HAS_LORA 1 // use on board LORA

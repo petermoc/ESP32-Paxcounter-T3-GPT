@@ -1,6 +1,7 @@
 #ifdef HAS_MQTT
 
 #include "mqttclient.h"
+#include "wifi_fallback.h"
 
 static QueueHandle_t MQTTSendQueue;
 TaskHandle_t mqttTask;
@@ -19,24 +20,7 @@ static bool mqtt_is_same_lan_as_broker(void) {
 }
 
 static int mqtt_connect_wifi(void) {
-  WiFi.mode(WIFI_STA);
-  WiFi.setHostname(clientId);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-
-  uint8_t attempt = 0;
-  while (WiFi.status() != WL_CONNECTED && attempt < 30) {
-    delay(500);
-    attempt++;
-  }
-
-  if (WiFi.status() != WL_CONNECTED) {
-    ESP_LOGW(TAG, "WiFi connect failed for MQTT (ssid=%s)", WIFI_SSID);
-    return -1;
-  }
-
-  ESP_LOGI(TAG, "WiFi connected for MQTT, IP=%s",
-           WiFi.localIP().toString().c_str());
-  return 0;
+  return wifi_connect_any("MQTT", 30, 500);
 }
 
 void mqtt_deinit(void) {
@@ -52,9 +36,13 @@ esp_err_t mqtt_init(void) {
   ETH.begin();
   ETH.setHostname(clientId);
 #else
+#if defined(FAST_BOOT_DISPLAY) && FAST_BOOT_DISPLAY
+  ESP_LOGI(TAG, "Skipping blocking WiFi connect during boot; MQTT will retry in background");
+#else
   if (mqtt_connect_wifi() != 0) {
     ESP_LOGW(TAG, "MQTT starts without network, will retry in loop");
   }
+#endif
 #endif
 
   mqttClient.begin(MQTT_SERVER, MQTT_PORT, netClient);

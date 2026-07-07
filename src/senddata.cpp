@@ -1,6 +1,60 @@
 // Basic Config
 #include "senddata.h"
 #include "http_fallback.h"
+#include "libpax_helpers.h"
+#if (HAS_LORA)
+#include "lorawan.h"
+#endif
+
+namespace {
+constexpr uint32_t kWifiCountSendIntervalMs = 10000;
+constexpr uint32_t kLoRaCountSendIntervalMs = 60000;
+uint32_t s_last_wifi_count_send_ms = 0;
+uint32_t s_last_lora_count_send_ms = 0;
+Ticker s_wifi_fallback_send_ticker;
+bool s_wifi_fallback_send_ticker_active = false;
+
+bool should_send_count_payload(bool use_wifi_fallback) {
+  const uint32_t now_ms = millis();
+  uint32_t &last_ms =
+      use_wifi_fallback ? s_last_wifi_count_send_ms : s_last_lora_count_send_ms;
+  const uint32_t interval_ms =
+      use_wifi_fallback ? kWifiCountSendIntervalMs : kLoRaCountSendIntervalMs;
+
+  if (last_ms != 0 && (uint32_t)(now_ms - last_ms) < interval_ms) {
+    return false;
+  }
+
+  last_ms = now_ms;
+  return true;
+}
+
+void stop_wifi_fallback_send_ticker() {
+  if (!s_wifi_fallback_send_ticker_active) {
+    return;
+  }
+
+  s_wifi_fallback_send_ticker.detach();
+  s_wifi_fallback_send_ticker_active = false;
+  ESP_LOGI(TAG, "Stopped dedicated WiFi fallback send ticker");
+}
+
+void ensure_wifi_fallback_send_ticker(bool use_wifi_fallback) {
+  if (!use_wifi_fallback) {
+    stop_wifi_fallback_send_ticker();
+    return;
+  }
+
+  if (s_wifi_fallback_send_ticker_active) {
+    return;
+  }
+
+  s_wifi_fallback_send_ticker.attach_ms(kWifiCountSendIntervalMs, setSendIRQ);
+  s_wifi_fallback_send_ticker_active = true;
+  ESP_LOGI(TAG, "Started dedicated WiFi fallback send ticker at %lu ms",
+           (unsigned long)kWifiCountSendIntervalMs);
+}
+} // namespace
 
 // void setSendIRQ(TimerHandle_t xTimer) {
 //  xTaskNotify(irqHandlerTask, SENDCYCLE_IRQ, eSetBits);
@@ -53,7 +107,16 @@ void SendPayload(uint8_t port) {
   spi_enqueuedata(&SendBuffer);
 #endif
 #ifdef HAS_MQTT
-  mqtt_enqueuedata(&SendBuffer);
+  bool route_to_mqtt = true;
+#if (HAS_LORA)
+  route_to_mqtt = !lora_transport_healthy();
+#endif
+  if (route_to_mqtt) {
+    mqtt_enqueuedata(&SendBuffer);
+  } else {
+    ESP_LOGI(TAG, "LoRaWAN healthy, skipping MQTT fallback enqueue on port %u",
+             SendBuffer.MessagePort);
+  }
 #endif
 } // SendPayload
 
@@ -68,10 +131,33 @@ void sendData() {
 #if (HAS_SDS011)
   sdsStatus_t sds_status;
 #endif
-  struct count_payload_t count =
-      count_from_libpax; // copy values from global libpax var
+  struct count_payload_t count = get_effective_count_from_libpax();
   ESP_LOGD(TAG, "Sending count results: pax=%d / wifi=%d / ble=%d", count.pax,
            count.wifi_count, count.ble_count);
+
+#ifdef HAS_MQTT
+  // Prefer WiFi HTTP samples whenever a configured hotspot/network is
+  // reachable so tracker maps get dense, GPS-joined pax points. LoRa stays
+  // enabled as a lower-rate backup path.
+  bool use_wifi_fallback = true;
+#else
+  bool use_wifi_fallback = false;
+#endif
+
+#if (HAS_LORA)
+  if (use_wifi_fallback) {
+    const uint32_t lora_age_ms = lora_last_tx_success_age_ms();
+    if (lora_age_ms == UINT32_MAX) {
+      ESP_LOGI(TAG, "LoRaWAN not yet healthy; WiFi HTTP path enabled");
+    } else {
+      ESP_LOGI(TAG,
+               "LoRaWAN last success age %lu ms; WiFi HTTP path enabled in parallel",
+               (unsigned long)lora_age_ms);
+    }
+  }
+#endif
+
+  ensure_wifi_fallback_send_ticker(use_wifi_fallback);
 
   while (bitmask) {
     switch (bitmask & mask) {
@@ -120,11 +206,26 @@ void sendData() {
       );
 #endif // HAS_SDCARD
 
+      if (!should_send_count_payload(use_wifi_fallback)) {
+        if (use_wifi_fallback) {
+          ESP_LOGI(
+              TAG,
+              "Skipping count payload; WiFi fallback cadence limit not reached yet");
+        } else {
+          ESP_LOGI(TAG,
+                   "Skipping count payload; LoRa cadence limit not reached yet");
+        }
+        break;
+      }
+
       SendPayload(COUNTERPORT);
 #ifdef HAS_MQTT
-      ESP_LOGI(TAG, "HTTP fallback sample: pax=%d wifi=%d ble=%d", count.pax,
-               count.wifi_count, count.ble_count);
-      http_fallback_send_counts(count);
+      if (use_wifi_fallback) {
+        ESP_LOGI(TAG,
+                 "Queueing WiFi HTTP sample: pax=%d wifi=%d ble=%d",
+                 count.pax, count.wifi_count, count.ble_count);
+        http_fallback_send_counts(count);
+      }
 #endif
       break; // case COUNTDATA
 

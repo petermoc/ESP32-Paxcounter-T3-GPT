@@ -51,13 +51,12 @@ void set_reset(uint8_t val[]) {
 
 void set_rssi(uint8_t val[]) {
   cfg.rssilimit = val[0] * -1;
-  libpax_counter_stop();
   libpax_config_t current_config;
   libpax_get_current_config(&current_config);
   current_config.wifi_rssi_threshold = cfg.rssilimit;
   current_config.ble_rssi_threshold = cfg.rssilimit;
   libpax_update_config(&current_config);
-  init_libpax();
+  restart_libpax_counter("remote set_rssi");
   ESP_LOGI(TAG, "Remote command: set RSSI limit to %hd", cfg.rssilimit);
 }
 
@@ -68,8 +67,7 @@ void set_sendcycle(uint8_t val[]) {
   cfg.sendcycle = val[0];
   ESP_LOGI(TAG, "Remote command: set send cycle to %u seconds",
            cfg.sendcycle * 2);
-  libpax_counter_stop();
-  init_libpax();
+  restart_libpax_counter("remote set_sendcycle");
 }
 
 void set_sleepcycle(uint8_t val[]) {
@@ -87,7 +85,6 @@ void set_wakesync(uint8_t val[]) {
 
 void set_wifichancycle(uint8_t val[]) {
   cfg.wifichancycle = val[0];
-  libpax_counter_stop();
   libpax_config_t current_config;
   libpax_get_current_config(&current_config);
 
@@ -103,28 +100,26 @@ void set_wifichancycle(uint8_t val[]) {
 
   current_config.wifi_channel_switch_interval = cfg.wifichancycle;
   libpax_update_config(&current_config);
-  init_libpax();
+  restart_libpax_counter("remote set_wifichancycle");
 }
 
 void set_wifichanmap(uint8_t val[]) {
   // swap byte order from msb to lsb, note: this is a platform dependent hack
   cfg.wifichanmap = __builtin_bswap16(*(uint16_t *)(val));
-  libpax_counter_stop();
   libpax_config_t current_config;
   libpax_get_current_config(&current_config);
   current_config.wifi_channel_map = cfg.wifichanmap;
   libpax_update_config(&current_config);
-  init_libpax();
+  restart_libpax_counter("remote set_wifichanmap");
 }
 
 void set_blescantime(uint8_t val[]) {
   cfg.blescantime = val[0];
-  libpax_counter_stop();
   libpax_config_t current_config;
   libpax_get_current_config(&current_config);
   current_config.blescantime = cfg.blescantime;
   libpax_update_config(&current_config);
-  init_libpax();
+  restart_libpax_counter("remote set_blescantime");
 }
 
 void set_countmode(uint8_t val[]) {
@@ -147,8 +142,7 @@ void set_countmode(uint8_t val[]) {
         "Remote command: set counter mode called with invalid parameter(s)");
     return;
   }
-  libpax_counter_stop();
-  init_libpax(); // re-inits counter mode from cfg.countermode
+  restart_libpax_counter("remote set_countmode");
 }
 
 void set_screensaver(uint8_t val[]) {
@@ -259,24 +253,22 @@ void set_loraadr(uint8_t val[]) {
 void set_blescan(uint8_t val[]) {
   ESP_LOGI(TAG, "Remote command: set BLE scanner to %s", val[0] ? "on" : "off");
   cfg.blescan = val[0] ? 1 : 0;
-  libpax_counter_stop();
   libpax_config_t current_config;
   libpax_get_current_config(&current_config);
   current_config.blecounter = cfg.blescan;
   libpax_update_config(&current_config);
-  init_libpax();
+  restart_libpax_counter("remote set_blescan");
 }
 
 void set_wifiscan(uint8_t val[]) {
   ESP_LOGI(TAG, "Remote command: set WIFI scanner to %s",
            val[0] ? "on" : "off");
   cfg.wifiscan = val[0] ? 1 : 0;
-  libpax_counter_stop();
   libpax_config_t current_config;
   libpax_get_current_config(&current_config);
   current_config.wificounter = cfg.wifiscan;
   libpax_update_config(&current_config);
-  init_libpax();
+  restart_libpax_counter("remote set_wifiscan");
 }
 
 void set_wifiant(uint8_t val[]) {

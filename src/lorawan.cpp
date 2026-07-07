@@ -18,6 +18,9 @@
 static QueueHandle_t LoraSendQueue;
 TaskHandle_t lmicTask = NULL, lorasendTask = NULL;
 char lmic_event_msg[LMIC_EVENTMSG_LEN]; // display buffer for LMIC event message
+static uint32_t s_last_lora_tx_success_ms = 0;
+static constexpr uint32_t kLoraHealthyWindowMs = 90000;
+static char s_transport_status_override[LMIC_EVENTMSG_LEN] = {0};
 
 class MyHalConfig_t : public Arduino_LMIC::HalConfiguration_t {
 public:
@@ -363,6 +366,51 @@ uint32_t lora_queuewaiting(void) {
   return uxQueueMessagesWaiting(LoraSendQueue);
 }
 
+bool lora_transport_healthy(void) {
+  if (!LMIC.devaddr) {
+    return false;
+  }
+
+  if (LMIC.opmode & (OP_JOINING | OP_REJOIN)) {
+    return false;
+  }
+
+  if (LoraSendQueue == NULL) {
+    return false;
+  }
+
+  if (s_last_lora_tx_success_ms == 0) {
+    return false;
+  }
+
+  const uint32_t now_ms = millis();
+  if ((uint32_t)(now_ms - s_last_lora_tx_success_ms) > kLoraHealthyWindowMs) {
+    return false;
+  }
+
+  return uxQueueMessagesWaiting(LoraSendQueue) < SEND_QUEUE_SIZE;
+}
+
+uint32_t lora_last_tx_success_age_ms(void) {
+  if (s_last_lora_tx_success_ms == 0) {
+    return UINT32_MAX;
+  }
+
+  return (uint32_t)(millis() - s_last_lora_tx_success_ms);
+}
+
+void lora_set_status_override(const char *status_text) {
+  if (status_text == nullptr || status_text[0] == '\0') {
+    s_transport_status_override[0] = '\0';
+    return;
+  }
+
+  snprintf(s_transport_status_override, sizeof(s_transport_status_override),
+           "%-16s", status_text);
+}
+
+void lora_clear_status_override(void) { s_transport_status_override[0] = '\0'; }
+
 // blocking wait until LMIC is idle
 void lora_waitforidle(uint16_t timeout_sec) {
   ESP_LOGI(TAG, "Waiting until LMIC is idle...");
@@ -401,6 +449,8 @@ void myEventCallback(void *pUserData, ev_t ev) {
   // process current event message
   switch (ev) {
   case EV_TXCOMPLETE:
+    s_last_lora_tx_success_ms = millis();
+    lora_clear_status_override();
     // -> processed in lora_send()
     break;
 
@@ -425,6 +475,7 @@ void myEventCallback(void *pUserData, ev_t ev) {
     // must call LMIC_reset() to stop joining
     // otherwise join procedure continues.
     LMIC_reset();
+    s_last_lora_tx_success_ms = 0;
     ESP_LOGW(TAG, "Join failed: last RSSI=%d SNR=%d",
              LMIC.rssi, (LMIC.snr + 2) / 4);
     break;
@@ -443,6 +494,11 @@ void myEventCallback(void *pUserData, ev_t ev) {
   // add Lora send queue length to display
   if (msgWaiting)
     snprintf(lmic_event_msg + 14, LMIC_EVENTMSG_LEN - 14, "%2u", msgWaiting);
+
+  if (s_transport_status_override[0] != '\0') {
+    snprintf(lmic_event_msg, LMIC_EVENTMSG_LEN, "%s",
+             s_transport_status_override);
+  }
 
   // print event (INFO so it shows with debug_level=3)
   ESP_LOGI(TAG, "%s | opmode=0x%08X devaddr=0x%08X",

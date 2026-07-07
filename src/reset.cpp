@@ -188,12 +188,17 @@ void enter_deepsleep(uint32_t wakeup_sec, gpio_num_t wakeup_gpio) {
 
   // set wakeup gpio, if we have
   if (wakeup_gpio != GPIO_NUM_MAX) {
+#if CONFIG_IDF_TARGET_ESP32C3
+    // ESP32-C3 does not provide the same RTC isolate/ext1 API surface as ESP32.
+    // For this WiFi-only footfall target we can safely skip the extra GPIO wake config.
+#else
     rtc_gpio_isolate(wakeup_gpio); // minimize deep sleep current
     #if CONFIG_IDF_TARGET_ESP32 
     esp_sleep_enable_ext1_wakeup(1ULL << wakeup_gpio, ESP_EXT1_WAKEUP_ALL_LOW);
     #else
     esp_sleep_enable_ext1_wakeup(1ULL << wakeup_gpio, ESP_EXT1_WAKEUP_ANY_LOW);
     #endif
+#endif
   }
 
   // time stamp sleep start time and save system monotonic time. Deep sleep.

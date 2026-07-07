@@ -29,7 +29,11 @@ shareddir = os.path.join (prjdir, "shared")
 haldir = os.path.join (shareddir, "hal")
 
 # check if hal file is present in source directory
-halconfig = config.get("board", "halfile")
+pioenv = env.get("PIOENV")
+if pioenv and config.has_option("env:" + pioenv, "halfile"):
+    halconfig = config.get("env:" + pioenv, "halfile")
+else:
+    halconfig = config.get("board", "halfile")
 
 # check if hal file is set by ENV CI_HALFILE
 if os.getenv("CI_HALFILE"):
@@ -109,7 +113,7 @@ env.Replace(PAXEXPRESS_REPO=repository)
 env.Replace(PAXEXPRESS_API_TOKEN=apitoken)
 
 # get runtime credentials and put them to compiler directive
-env.Append(BUILD_FLAGS=[
+build_flags = [
     u'-DWIFI_SSID=\\"' + mykeys["OTA_WIFI_SSID"] + '\\"',
     u'-DWIFI_PASS=\\"' + mykeys["OTA_WIFI_PASS"] + '\\"',
     u'-DPAXEXPRESS_USER=\\"' + mykeys["PAXEXPRESS_USER"] + '\\"',
@@ -117,7 +121,17 @@ env.Append(BUILD_FLAGS=[
     u'-DPAXEXPRESS_PACKAGE=\\"' + package + '\\"',
     u'-DARDUINO_LMIC_PROJECT_CONFIG_H=' + lmicconfig,
     u'-I \"' + shareddir + '\"'
-    ])
+    ]
+
+for index in range(1, 6):
+    ssid_key = "WIFI_FALLBACK_SSID_{0}".format(index)
+    pass_key = "WIFI_FALLBACK_PASS_{0}".format(index)
+    if ssid_key in mykeys and mykeys[ssid_key]:
+        build_flags.append(u'-D{0}=\\"{1}\\"'.format(ssid_key, mykeys[ssid_key]))
+        build_flags.append(
+            u'-D{0}=\\"{1}\\"'.format(pass_key, mykeys.get(pass_key, "")))
+
+env.Append(BUILD_FLAGS=build_flags)
 
 # function for pushing new firmware to paxexpress storage using API
 def publish_paxexpress(source, target, env):

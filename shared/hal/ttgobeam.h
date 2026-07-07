@@ -37,7 +37,10 @@
 #define MY_DISPLAY_SDA SDA
 #define MY_DISPLAY_SCL SCL
 #define MY_DISPLAY_RST NOT_A_PIN
-//#define MY_DISPLAY_FLIP  1 // use if display is rotated
+#define MY_DISPLAY_ADDR 0x3C
+#define OLED_TYPE OLED_SSD1306_3C
+#define OLED_FREQUENCY 100000L
+#define MY_DISPLAY_FLIP  1 // use if display is rotated
 
 //#define DISABLE_BROWNOUT 1 // comment out if you want to keep brownout feature
 

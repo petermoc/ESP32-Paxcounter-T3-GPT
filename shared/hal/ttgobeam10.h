@@ -25,7 +25,9 @@ Reset -> reset device
 #define MY_DISPLAY_SCL SCL
 #define MY_DISPLAY_RST NOT_A_PIN
 //#define MY_DISPLAY_FLIP  1 // use if display is rotated
+#define FAST_BOOT_DISPLAY 1 // skip long splash delays so tracker comes up quickly
 
+#define HAS_MQTT 1 // enable WiFi HTTP fallback transport
 #define HAS_LORA 1       // comment out if device shall not send data via LoRa
 #define CFG_sx1276_radio 1 // HPD13A LoRa SoC
 #define HAS_BUTTON GPIO_NUM_38 // middle on board button

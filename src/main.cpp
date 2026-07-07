@@ -81,6 +81,10 @@ BME_IRQ         <- setBMEIRQ() <- Ticker.h
 
 char clientId[20] = {0}; // unique ClientID
 
+#ifndef DEFAULT_CLIENT_ID
+#define DEFAULT_CLIENT_ID "paxcounter-T3"
+#endif
+
 void setup() {
 
   //ESP_LOGE(TAG, ">>> SETUP START reached <<<");
@@ -102,8 +106,8 @@ void setup() {
   (*((uint32_t volatile *)ETS_UNCACHED_ADDR((DR_REG_RTCCNTL_BASE + 0xd4)))) = 0;
 #endif
 
-  // fixed device name (TTN / logs)
-  snprintf(clientId, sizeof(clientId), "paxcounter-T3");
+  // fixed device name (logs / WiFi fallback / MQTT client id)
+  snprintf(clientId, sizeof(clientId), DEFAULT_CLIENT_ID);
 
   // setup debug output or silence device
 #if (VERBOSE)
@@ -200,9 +204,17 @@ void setup() {
 // initialize display
 #ifdef HAS_DISPLAY
   strcat_P(features, " DISP");
+#if defined(FAST_BOOT_DISPLAY) && FAST_BOOT_DISPLAY
+  cfg.screenon = 1;
+  cfg.screensaver = 0;
+#endif
   DisplayIsOn = cfg.screenon;
   // display verbose info only after a coldstart (note: blocking call!)
-  dp_init(RTC_runmode == RUNMODE_POWERCYCLE ? true : false);
+  bool verboseDisplayBoot = (RTC_runmode == RUNMODE_POWERCYCLE ? true : false);
+#if defined(FAST_BOOT_DISPLAY) && FAST_BOOT_DISPLAY
+  verboseDisplayBoot = false;
+#endif
+  dp_init(verboseDisplayBoot);
 #endif
 
 #ifdef BOARD_HAS_PSRAM
@@ -295,6 +307,12 @@ void setup() {
     cfg.wifiscan = WIFICOUNTER;
     saveConfig(false);
     ESP_LOGI(TAG, "WIFISCAN runtime config aligned to compile-time default");
+  }
+
+  if (cfg.countermode != COUNTERMODE) {
+    cfg.countermode = COUNTERMODE;
+    saveConfig(false);
+    ESP_LOGI(TAG, "COUNTERMODE runtime config aligned to compile-time default");
   }
 
 

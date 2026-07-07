@@ -37,6 +37,18 @@ MY_FONT_LARGE:     16x32px = 8 chars / line @ 2 lines
 #include "globals.h"
 #include "display.h"
 
+#ifndef FAST_BOOT_DISPLAY
+#define FAST_BOOT_DISPLAY 0
+#endif
+
+#if FAST_BOOT_DISPLAY
+static constexpr uint32_t kBootInfoDelayMs = 150;
+static constexpr uint32_t kQrSplashDelayMs = 250;
+#else
+static constexpr uint32_t kBootInfoDelayMs = 2000;
+static constexpr uint32_t kQrSplashDelayMs = 8000;
+#endif
+
 static uint8_t plotbuf[PLOTBUFFERSIZE] = {0};
 uint8_t DisplayIsOn = 0;
 hw_timer_t *displayIRQ = NULL;
@@ -116,7 +128,7 @@ void dp_init(bool verbose) {
     dp->printf("%dMB %s Flash", spi_flash_get_chip_size() / (1024 * 1024),
                (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "int." : "ext.");
     dp_dump();
-    delay(2000);
+    delay(kBootInfoDelayMs);
     dp_clear();
 #endif // VERBOSE
 
@@ -144,7 +156,7 @@ void dp_init(bool verbose) {
     // give user some time to read or take picture
     dp_dump();
 #if !(BOOTMENU)
-    delay(8000);
+    delay(kQrSplashDelayMs);
 #endif
 
 #endif // HAS_LORA

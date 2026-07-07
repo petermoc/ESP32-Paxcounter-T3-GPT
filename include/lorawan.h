@@ -39,6 +39,10 @@ void lora_enqueuedata(MessageBuffer_t *message);
 void lora_queuereset(void);
 void lora_waitforidle(uint16_t timeout_sec);
 uint32_t lora_queuewaiting(void);
+bool lora_transport_healthy(void);
+uint32_t lora_last_tx_success_age_ms(void);
+void lora_set_status_override(const char *status_text);
+void lora_clear_status_override(void);
 void myEventCallback(void *pUserData, ev_t ev);
 void myRxCallback(void *pUserData, uint8_t port, const uint8_t *pMsg,
                             size_t nMsg);
