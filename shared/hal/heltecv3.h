@@ -12,6 +12,8 @@
 
 // LORA settings
 #define HAS_LORA 1 // use on board LORA
+// Use phone and local WiFi profiles when LoRa is unavailable.
+#define HAS_MQTT 1
 #define CFG_sx1262_radio 1 // HPD16A
 // Pins for LORA chip SPI interface, reset line and interrupt lines
 #define LORA_IRQ DIO0

@@ -13,6 +13,10 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 
+namespace {
+constexpr uint32_t kAckFreshnessWatchdogSeconds = 25;
+}
+
 static int http_fallback_connect_wifi(void) {
   return wifi_connect_any("HTTP fallback", 10, 500);
 }
@@ -74,6 +78,13 @@ static bool extract_json_string_field(const String &json, const char *key, Strin
 static void process_http_command_response(const String &response_body) {
   if (response_body.length() == 0) {
     return;
+  }
+
+  String ack_id;
+  if (extract_json_string_field(response_body, "ackId", ack_id)) {
+    wifi_note_transport_success(ack_id.c_str());
+  } else {
+    wifi_note_transport_success(nullptr);
   }
 
   String command_base64;
@@ -157,6 +168,19 @@ static TaskHandle_t httpFallbackTaskHandle = nullptr;
 
 static void http_fallback_send_counts_impl(const count_payload_t &count) {
   const size_t max_profiles = wifi_profile_count() > 0 ? wifi_profile_count() : 1;
+  const wifi_transport_status_t transport_status = wifi_get_transport_status();
+
+  if (transport_status.last_success_age_seconds != UINT32_MAX &&
+      transport_status.last_success_age_seconds > kAckFreshnessWatchdogSeconds &&
+      transport_status.consecutive_failures > 0) {
+    ESP_LOGW(TAG,
+             "HTTP fallback ack watchdog fired after %lu s without success on '%s'",
+             (unsigned long)transport_status.last_success_age_seconds,
+             transport_status.active_ssid != nullptr && transport_status.active_ssid[0] != '\0'
+                 ? transport_status.active_ssid
+                 : "(disconnected)");
+    wifi_note_transport_failure("HTTP fallback stale ack watchdog");
+  }
 
   for (size_t attempt = 0; attempt < max_profiles; ++attempt) {
     if (http_fallback_connect_wifi() != 0) {
@@ -181,6 +205,21 @@ static void http_fallback_send_counts_impl(const count_payload_t &count) {
     append_json_string(json, "deviceId", String(clientId), needs_comma);
     append_json_string(json, "deviceUid", device_uid, needs_comma);
     append_json_string(json, "wifiSsid", WiFi.SSID(), needs_comma);
+    append_json_number(json, "transportAttempt", (int32_t)(attempt + 1), needs_comma);
+    append_json_number(json, "transportSequence",
+                       (int32_t)transport_status.transport_sequence, needs_comma);
+    append_json_number(json, "consecutiveTransportFailures",
+                       (int32_t)transport_status.consecutive_failures, needs_comma);
+    if (transport_status.last_success_age_seconds != UINT32_MAX) {
+      append_json_number(json, "lastHttpSuccessAgeSeconds",
+                         (int32_t)transport_status.last_success_age_seconds,
+                         needs_comma);
+    }
+    if (transport_status.last_ack_id != nullptr &&
+        transport_status.last_ack_id[0] != '\0') {
+      append_json_string(json, "lastAckId", String(transport_status.last_ack_id),
+                         needs_comma);
+    }
     append_json_number(json, "wifi", count.wifi_count, needs_comma);
     append_json_number(json, "ble", count.ble_count, needs_comma);
     append_json_number(json, "pax", count.pax, needs_comma);
@@ -205,55 +244,64 @@ static void http_fallback_send_counts_impl(const count_payload_t &count) {
 
     json += "}";
 
-    HTTPClient http;
     const String fallback_url = String(HTTP_FALLBACK_URL);
     const bool use_tls = fallback_url.startsWith("https://");
     libpax_config_t saved_config;
     const bool scanners_paused = use_tls && pause_scanners_for_http(saved_config);
-    bool begin_ok = false;
+    bool post_failed = false;
 
-    WiFiClient plain_client;
-    WiFiClientSecure secure_client;
-    if (use_tls) {
-      secure_client.setInsecure();
-      secure_client.setHandshakeTimeout(5);
-      begin_ok = http.begin(secure_client, HTTP_FALLBACK_URL);
-    } else {
-      begin_ok = http.begin(plain_client, HTTP_FALLBACK_URL);
+    // Keep HTTP clients alive until before rotating Wi-Fi profiles. Disconnecting
+    // the Wi-Fi driver while their destructors release buffers can crash ESP32-S3.
+    {
+      HTTPClient http;
+      bool begin_ok = false;
+      WiFiClient plain_client;
+      WiFiClientSecure secure_client;
+      if (use_tls) {
+        secure_client.setInsecure();
+        secure_client.setHandshakeTimeout(5);
+        begin_ok = http.begin(secure_client, HTTP_FALLBACK_URL);
+      } else {
+        begin_ok = http.begin(plain_client, HTTP_FALLBACK_URL);
+      }
+
+      if (!begin_ok) {
+        ESP_LOGW(TAG, "HTTP fallback begin failed");
+        post_failed = true;
+      } else {
+        http.setConnectTimeout(5000);
+        http.setTimeout(5000);
+        http.addHeader("Content-Type", "application/json");
+
+        if (strlen(HTTP_FALLBACK_APIKEY) > 0) {
+          http.addHeader("X-Api-Key", HTTP_FALLBACK_APIKEY);
+        }
+
+        ESP_LOGI(TAG, "HTTP fallback POST to %s via '%s' (heap=%u)",
+                 HTTP_FALLBACK_URL, WiFi.SSID().c_str(), (unsigned int)ESP.getFreeHeap());
+        const int status = http.POST((uint8_t *)json.c_str(), json.length());
+        if (status > 0 && status < 300) {
+          ESP_LOGI(TAG, "HTTP fallback sent count payload (%d)", status);
+          // Reading the response body via HTTPClient::getString() can corrupt
+          // the heap on the classic ESP32 T-Beam after a successful POST.
+          // The upload acknowledgement itself is sufficient for transport health.
+          wifi_note_transport_success(nullptr);
+          http.end();
+          resume_scanners_after_http(saved_config, scanners_paused);
+          return;
+        }
+
+        ESP_LOGW(TAG, "HTTP fallback POST failed (%d) on '%s'", status,
+                 WiFi.SSID().c_str());
+        http.end();
+        post_failed = true;
+      }
     }
 
-    if (!begin_ok) {
-      ESP_LOGW(TAG, "HTTP fallback begin failed");
-      resume_scanners_after_http(saved_config, scanners_paused);
-      wifi_note_transport_failure("HTTP fallback begin");
-      continue;
-    }
-
-    http.setConnectTimeout(5000);
-    http.setTimeout(5000);
-    http.addHeader("Content-Type", "application/json");
-
-    if (strlen(HTTP_FALLBACK_APIKEY) > 0) {
-      http.addHeader("X-Api-Key", HTTP_FALLBACK_APIKEY);
-    }
-
-    ESP_LOGI(TAG, "HTTP fallback POST to %s via '%s' (heap=%u)",
-             HTTP_FALLBACK_URL, WiFi.SSID().c_str(), (unsigned int)ESP.getFreeHeap());
-    const int status = http.POST((uint8_t *)json.c_str(), json.length());
-    if (status > 0 && status < 300) {
-      const String response_body = http.getString();
-      ESP_LOGI(TAG, "HTTP fallback sent count payload (%d)", status);
-      process_http_command_response(response_body);
-      http.end();
-      resume_scanners_after_http(saved_config, scanners_paused);
-      return;
-    }
-
-    ESP_LOGW(TAG, "HTTP fallback POST failed (%d) on '%s'", status,
-             WiFi.SSID().c_str());
-    http.end();
     resume_scanners_after_http(saved_config, scanners_paused);
-    wifi_note_transport_failure("HTTP fallback POST");
+    if (post_failed) {
+      wifi_note_transport_failure("HTTP fallback POST");
+    }
   }
 }
 

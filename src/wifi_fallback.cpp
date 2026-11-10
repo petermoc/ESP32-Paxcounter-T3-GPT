@@ -32,12 +32,20 @@ const WifiProfile kWifiProfiles[] = {
 #ifdef WIFI_FALLBACK_SSID_5
     {WIFI_FALLBACK_SSID_5, WIFI_FALLBACK_PASS_5},
 #endif
+#ifdef WIFI_FALLBACK_SSID_6
+    {WIFI_FALLBACK_SSID_6, WIFI_FALLBACK_PASS_6},
+#endif
 };
 
 constexpr size_t kWifiProfileCount =
     sizeof(kWifiProfiles) / sizeof(kWifiProfiles[0]);
 size_t s_last_successful_profile = 0;
 int s_active_profile_index = -1;
+uint32_t s_last_transport_success_ms = 0;
+uint32_t s_last_transport_failure_ms = 0;
+uint32_t s_consecutive_transport_failures = 0;
+uint32_t s_transport_sequence = 0;
+String s_last_ack_id;
 
 bool is_profile_usable(const WifiProfile &profile) {
   return profile.ssid != nullptr && profile.ssid[0] != '\0';
@@ -140,6 +148,8 @@ const char *wifi_get_active_profile_ssid(void) {
 
 void wifi_note_transport_failure(const char *reason) {
   const String active_ssid = WiFi.SSID();
+  s_last_transport_failure_ms = millis();
+  s_consecutive_transport_failures++;
   if (s_active_profile_index >= 0 && kWifiProfileCount > 0) {
     s_last_successful_profile =
         ((size_t)s_active_profile_index + 1) % kWifiProfileCount;
@@ -150,6 +160,40 @@ void wifi_note_transport_failure(const char *reason) {
   s_active_profile_index = -1;
   WiFi.disconnect(true, true);
   delay(150);
+}
+
+void wifi_note_transport_success(const char *ack_id) {
+  s_last_transport_success_ms = millis();
+  s_consecutive_transport_failures = 0;
+  s_transport_sequence++;
+  s_last_ack_id = ack_id == nullptr ? "" : ack_id;
+  ESP_LOGI(TAG, "WiFi transport success on '%s', ack=%s seq=%lu",
+           WiFi.SSID().length() ? WiFi.SSID().c_str() : "(disconnected)",
+           s_last_ack_id.length() ? s_last_ack_id.c_str() : "-",
+           (unsigned long)s_transport_sequence);
+}
+
+wifi_transport_status_t wifi_get_transport_status(void) {
+  const uint32_t now_ms = millis();
+  const uint32_t success_age_seconds =
+      s_last_transport_success_ms == 0
+          ? UINT32_MAX
+          : (uint32_t)((now_ms - s_last_transport_success_ms) / 1000UL);
+  const uint32_t failure_age_seconds =
+      s_last_transport_failure_ms == 0
+          ? UINT32_MAX
+          : (uint32_t)((now_ms - s_last_transport_failure_ms) / 1000UL);
+
+  wifi_transport_status_t status{};
+  status.active_profile_index = s_active_profile_index;
+  status.profile_count = kWifiProfileCount;
+  status.last_success_age_seconds = success_age_seconds;
+  status.last_failure_age_seconds = failure_age_seconds;
+  status.consecutive_failures = s_consecutive_transport_failures;
+  status.transport_sequence = s_transport_sequence;
+  status.active_ssid = wifi_get_active_profile_ssid();
+  status.last_ack_id = s_last_ack_id.c_str();
+  return status;
 }
 
 size_t wifi_profile_count(void) { return kWifiProfileCount; }

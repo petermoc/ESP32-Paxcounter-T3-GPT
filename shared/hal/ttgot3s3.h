@@ -30,6 +30,11 @@
 #define HAS_LED (37) // LED is on GPIO37
 #define HAS_MQTT 1 // enable WiFi HTTP fallback transport
 
+// The Li-Ion cell is measured through the board's 100k/100k divider on GPIO1.
+// This feeds the existing voltage and percent fields on WiFi and LoRa uplinks.
+#define BAT_MEASURE_ADC ADC1_CHANNEL_0
+#define BAT_VOLTAGE_DIVIDER 2
+
 // LORA settings
 #define HAS_LORA 1 // use on board LORA
 #define CFG_sx1262_radio 1 // HPD16A

@@ -62,7 +62,13 @@ void ensure_wifi_fallback_send_ticker(bool use_wifi_fallback) {
 
 // void setSendIRQ(void) { setSendIRQ(NULL); }
 
-void setSendIRQ(void) { xTaskNotify(irqHandlerTask, SENDCYCLE_IRQ, eSetBits); }
+void setSendIRQ(void) {
+  // libpax can report its first cycle before main() has created the IRQ task.
+  // Dropping that early notification is safe; notifying a null task crashes ESP32-S3.
+  if (irqHandlerTask != nullptr) {
+    xTaskNotify(irqHandlerTask, SENDCYCLE_IRQ, eSetBits);
+  }
+}
 
 // put data to send in RTos Queues used for transmit over channels Lora and SPI
 void SendPayload(uint8_t port) {

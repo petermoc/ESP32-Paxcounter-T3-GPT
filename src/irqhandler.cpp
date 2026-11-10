@@ -86,8 +86,15 @@ void irqHandler(void *pvParameters) {
 // they notify the irq handler task
 
 void IRAM_ATTR doIRQ(int irq) {
+  // Some peripherals can raise their first interrupt while startup is still
+  // creating the handler task. Dropping that early tick is safer than
+  // rebooting the whole counter with a null FreeRTOS task handle.
+  TaskHandle_t handler = irqHandlerTask;
+  if (handler == NULL)
+    return;
+
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-  xTaskNotifyFromISR(irqHandlerTask, irq, eSetBits, &xHigherPriorityTaskWoken);
+  xTaskNotifyFromISR(handler, irq, eSetBits, &xHigherPriorityTaskWoken);
   if (xHigherPriorityTaskWoken)
     portYIELD_FROM_ISR();
 }

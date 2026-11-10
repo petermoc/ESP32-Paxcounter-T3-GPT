@@ -27,16 +27,20 @@
 //#define SDCARD_MISO  (37)
 //#define SDCARD_SCLK  (36)
 
-// display SSH1106 address 0x3c
+// T-Beam S3 Supreme uses an SH1106 OLED at I2C address 0x3D.
 #define HAS_DISPLAY 1
 #define MY_DISPLAY_SDA (17)
 #define MY_DISPLAY_SCL (18)
 #define MY_DISPLAY_RST NOT_A_PIN
+#define MY_DISPLAY_ADDR 0x3D
+#define OLED_TYPE OLED_SH1106_3D
+#define OLED_FREQUENCY 100000L
 //#define MY_DISPLAY_FLIP  1 // use if display is rotated
 
 // button and led
 #define HAS_BUTTON GPIO_NUM_0       // SW3 button is on GPIO0
 #define HAS_LED NOT_A_PIN
+#define HAS_MQTT 1 // enable WiFi HTTP fallback transport
 // SW2 -> CHIP_PU
 // SW3 -> PWR_KEY
 

@@ -87,7 +87,11 @@ void dp_setup(int contrast) {
   dp = new ONE_BIT_DISPLAY;
   dp->setI2CPins(MY_DISPLAY_SDA, MY_DISPLAY_SCL, MY_DISPLAY_RST);
   dp->setBitBang(false);
-  dp->I2Cbegin(OLED_TYPE, OLED_ADDR, OLED_FREQUENCY);
+  const int display_init_result =
+      dp->I2Cbegin(OLED_TYPE, OLED_ADDR, OLED_FREQUENCY);
+  ESP_LOGI(TAG, "OLED init: type=%d addr=0x%02X sda=%d scl=%d result=%d",
+           OLED_TYPE, OLED_ADDR, MY_DISPLAY_SDA, MY_DISPLAY_SCL,
+           display_init_result);
   dp->allocBuffer(); // render all outputs to lib internal backbuffer
   dp->setTextWrap(false);
   dp->setRotation(

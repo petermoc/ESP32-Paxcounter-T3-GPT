@@ -25,6 +25,7 @@ extern Ticker bmecycler;
 extern bmeStatus_t
     bme_status; // Make struct for storing gps data globally available
 
+#ifdef HAS_BME680
 // --- Bosch BSEC library configuration ---
 // We use 3,3V supply voltage; 3s max time between sensor_control calls; 4 days
 // calibration. Change this const if not applicable for your application (see
@@ -48,6 +49,7 @@ const uint8_t bsec_config_iaq[] = {
     generic_33v_300s_4d
     generic_33v_300s_28d
 */
+#endif
 
 // Helper functions declarations
 int bme_init();

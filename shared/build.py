@@ -123,7 +123,7 @@ build_flags = [
     u'-I \"' + shareddir + '\"'
     ]
 
-for index in range(1, 6):
+for index in range(1, 7):
     ssid_key = "WIFI_FALLBACK_SSID_{0}".format(index)
     pass_key = "WIFI_FALLBACK_PASS_{0}".format(index)
     if ssid_key in mykeys and mykeys[ssid_key]:
